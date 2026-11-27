@@ -15,6 +15,14 @@ HOST_RE = re.compile(r"^[a-z0-9]([a-z0-9.\-]{0,250}[a-z0-9])?$")
 COMMON_PORTS = [21, 22, 23, 25, 53, 80, 110, 143, 443, 445, 1433, 3000, 3306, 3389, 5432, 5900, 6379,
                 8000, 8008, 8080, 8443, 9200, 11211, 27017]
 HTTP_PORTS = {80, 443, 3000, 8000, 8008, 8080, 8443, 9200}
+EXTRA_PORTS = {81, 2375, 2376, 5000, 5601, 5985, 5986, 7001, 8009, 8081, 8088, 8888, 9000, 9090, 9092, 15672}
+
+
+def nmap_ports() -> str:
+    """Explicit port list: nmap's default top-1000 omits Redis (6379), so we always include every port our
+    exposed-service rules know about, plus common web/admin ports."""
+    from .normalize import EXPOSED
+    return ",".join(str(p) for p in sorted(set(COMMON_PORTS) | EXTRA_PORTS | set(EXPOSED)))
 
 
 class ToolAborted(Exception):
@@ -119,7 +127,7 @@ def run_nmap(host: str, cancelled) -> tuple[str, list[dict]]:
     if is_lab(host):
         f = LAB.get(host, {"services": []})
         return "[simulated lab target - nmap output not generated]", [dict(s) for s in f["services"]]
-    xml = run_cmd(["nmap", "-Pn", "-sT", "-sV", "--version-light", "-T3", "--top-ports", "200", "--open",
+    xml = run_cmd(["nmap", "-Pn", "-sT", "-sV", "--version-light", "-T3", "-p", nmap_ports(), "--open",
                    "-oX", "-", host], cancelled)
     return xml, parse_nmap_xml(xml)
 

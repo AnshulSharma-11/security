@@ -39,7 +39,7 @@ export SENTINEL_EAGER=true            # runs jobs inline: dev/tests only, bypass
 python -m app.seed && uvicorn app.main:app --reload
 # second terminal
 cd frontend && npm install && npm run dev   # http://localhost:5173 (proxies /api -> :8000)
-cd backend && python -m pytest -q           # 8 end-to-end tests
+cd backend && python -m pytest -q           # 9 end-to-end tests
 ```
 
 ## Demo walkthrough (5 to 10 minutes)
@@ -101,11 +101,13 @@ All endpoints from the assignment exist (`/auth/login|refresh`, `/projects`, `/a
 
 ## Assumptions and limitations (honest list)
 
-* The Docker images and the real nmap/nuclei execution paths could not be run in the environment where this was written (no Docker, no scanner binaries). What *was* verified: all API behaviour, the full pipeline on simulated targets, the nmap XML and nuclei JSONL parsers (including hostile input), and a production build of the UI. Run `docker compose build` and a lab scan once before the demo; fix the nuclei version/arch in `Dockerfile.worker` if the download URL has changed.
+* **Verified here:** all API behaviour, the full pipeline on simulated targets, the parsers (including hostile input), and a production UI build. The real **discovery and Nmap adapters were also run** against live local services (HTTP banner, technology and an exposed Redis port were detected and scored; a job queued for an unapproved asset was rejected inside the worker).
+* **Not verified here:** the Docker images/compose file (no Docker available) and the **Nuclei** adapter against the real binary (only its parser, using nuclei-format fixtures). Run `docker compose build` and one lab scan before the demo; fix the nuclei version/arch in `Dockerfile.worker` if the download URL has changed.
+* Nmap scans an explicit port list (common web/admin ports plus every port the exposed-service rules cover) rather than nmap's default top-1000, which omits Redis. Ports outside the list are not scanned.
 * Graph search runs in Python over relational tables rather than Neo4j. Fine for hundreds of assets; Neo4j would be the next step.
 * Relationships between assets are explicit (user-entered) plus inferred same-/24; real traffic/topology ingestion is out of scope.
-* Schema is created with `create_all` on start; `docs/schema.sql` is generated for review. Alembic migrations are the production follow-up.
-* Login throttling is in-memory (per API process); tokens are held in `sessionStorage` (cleared on tab close; httpOnly cookies + CSRF would be stronger).
+* Tables are created on API start; an Alembic baseline migration is included (`alembic upgrade head`) and `docs/schema.sql` is generated for review. Incremental migrations start from that baseline.
+* Login throttling (5 failures per 15 minutes per account) is stored in the audit log, so it is shared across API processes; it does not yet throttle by IP. Tokens are held in `sessionStorage` (cleared on tab close; httpOnly cookies + CSRF would be stronger).
 * The worker needs database access to persist results, so a compromised worker could read the DB. Next step: have the worker post results to the API with a scoped token.
 * Roles are a column on `users` (admin | analyst) instead of a separate `roles` table.
 * No scheduling/continuous monitoring, no PDF export (reports are self-contained HTML).

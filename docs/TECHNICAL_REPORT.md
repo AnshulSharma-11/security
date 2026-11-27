@@ -52,11 +52,10 @@ scanner output, IDOR across tenants, privilege escalation (analyst approving ass
 exhaustion (timeout, cancellation, limits), brute-force login.
 
 ## 4. Testing
-`backend/tests/test_flow.py` (8 tests): login/refresh/token-type, full pipeline outputs on lab targets (assets, services, findings,
+`backend/tests/test_flow.py` (9 tests): login/refresh/token-type, login throttling, full pipeline outputs on lab targets (assets, services, findings,
 evidence, score factors, attack paths, overview), de-duplication on re-scan, authorisation gate and RBAC, false-positive score
 behaviour, tenant isolation, report escaping and audit coverage, parser hardening.
 
 ## 5. Known gaps and next steps
-See "Assumptions and limitations" in the README. Highest priority: run the container build and a live lab scan, add Alembic
-migrations, move throttling to Redis, let the worker report results through a scoped API instead of direct DB access, and add
+See "Assumptions and limitations" in the README. Highest priority: run the container build and a live Nuclei lab scan, add per-IP throttling, let the worker report results through a scoped API instead of direct DB access, and add
 Neo4j-backed path queries and scheduled re-scans with change detection.

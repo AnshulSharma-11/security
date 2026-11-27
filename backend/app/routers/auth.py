@@ -1,17 +1,16 @@
-import time
-from datetime import timedelta
+from datetime import timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from ..config import settings
 from ..db import get_db
-from ..models import Project, User, now
+from ..models import AuditLog, Project, User, now
 from ..security import audit, current_user, decode_token, make_token, verify_pw
 from ..serializers import ser_user
 from .common import EMAIL_RE
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-_fails: dict[str, list[float]] = {}  # in-memory brute-force throttle (per process; use Redis when scaling out)
+MAX_FAILS, WINDOW = 5, timedelta(minutes=15)  # throttle state lives in the audit log: shared across processes, survives restarts
 
 
 class LoginIn(BaseModel):
@@ -31,15 +30,14 @@ def _tokens(u: User):
 @router.post("/login")
 def login(body: LoginIn, request: Request, db: Session = Depends(get_db)):
     key = body.email.lower()
-    recent = [t for t in _fails.get(key, []) if time.time() - t < 900]
-    if len(recent) >= 5:
+    fails = db.query(AuditLog).filter(AuditLog.action == "auth.login_failed", AuditLog.user_email == key,
+                                      AuditLog.created_at > now() - WINDOW).count()
+    if fails >= MAX_FAILS:
         raise HTTPException(429, "Too many failed attempts. Try again in 15 minutes.")
     u = db.query(User).filter_by(email=key).first()
     if not (u and u.is_active and verify_pw(body.password, u.password_hash)):
-        _fails[key] = recent + [time.time()]
         audit(db, None, "auth.login_failed", detail=key, request=request, org_id=u.org_id if u else None, email=key)
         raise HTTPException(401, "Incorrect email or password")
-    _fails.pop(key, None)
     u.last_login = now()
     db.commit()
     audit(db, u, "auth.login", request=request)

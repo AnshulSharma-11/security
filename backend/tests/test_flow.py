@@ -18,6 +18,7 @@ def client():
             assert seed(db, PW)
             other = Organization(name="Other Org"); db.add(other); db.flush()
             db.add(User(org_id=other.id, email="eve@other.example", name="Eve", role="admin", password_hash=hash_pw(PW)))
+            db.add(User(org_id=other.id, email="mallory@other.example", name="Mallory", role="analyst", password_hash=hash_pw(PW)))
             db.commit()
         yield c
 
@@ -36,6 +37,12 @@ def test_login_and_refresh(client):
     assert r.status_code == 200
     assert client.post("/auth/refresh", json={"refresh_token": data["access_token"]}).status_code == 401  # wrong token type
     assert client.get("/assets?project_id=1").status_code == 401
+
+
+def test_login_throttle(client):
+    for _ in range(5):
+        assert client.post("/auth/login", json={"email": "mallory@other.example", "password": "wrong-wrong-1"}).status_code == 401
+    assert client.post("/auth/login", json={"email": "mallory@other.example", "password": PW}).status_code == 429  # even the right password
 
 
 def test_pipeline_outputs(client):
